@@ -20,9 +20,8 @@
   </head>
   <body>
     <h2>rPPG Live (WebRTC)</h2>
-    <div style="position: relative; display: inline-block;">
+    <div id="container" style="position: relative; display: inline-block;">
       <video id="video" autoplay playsinline muted></video>
-      <canvas id="overlay"></canvas>
     </div>
     <div id="hr">HR: --</div>
     <div id="rr">RR: --</div>
@@ -31,8 +30,6 @@
       const video = document.getElementById("video");
       const hrDiv = document.getElementById("hr");
       const rrDiv = document.getElementById("rr");
-      const overlay = document.getElementById("overlay");
-      const ctx = overlay.getContext("2d");
 
       async function start() {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -41,8 +38,6 @@
         });
         video.srcObject = stream;
         await new Promise((r) => (video.onloadedmetadata = r));
-        overlay.width = video.videoWidth;
-        overlay.height = video.videoHeight;
 
         const pc = new RTCPeerConnection({
           iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -57,13 +52,6 @@
             }
             if (data.rr) {
               rrDiv.textContent = `RR: ${data.rr.toFixed(1)} RPM`;
-            }
-            if (data.box) {
-              const [x1, y1, x2, y2] = data.box;
-              ctx.clearRect(0, 0, overlay.width, overlay.height);
-              ctx.strokeStyle = "lime";
-              ctx.lineWidth = 2;
-              ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
             }
           } catch (e) {}
         };

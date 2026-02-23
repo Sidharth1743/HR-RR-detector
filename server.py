@@ -134,7 +134,7 @@ async def offer(request: Request):
                         if rr_history:
                             rr = float(np.median(rr_history))
 
-                        if (hr is not None or rr is not None) and data_channel["dc"] is not None:
+                        if data_channel["dc"] is not None:
                             try:
                                 payload = {}
                                 if hr is not None:
@@ -145,13 +145,6 @@ async def offer(request: Request):
                                     rr_val = float(rr)
                                     if rr_val == rr_val:
                                         payload["rr"] = rr_val
-                                if model.box is not None:
-                                    try:
-                                        y1, y2 = int(model.box[0][0]), int(model.box[0][1])
-                                        x1, x2 = int(model.box[1][0]), int(model.box[1][1])
-                                        payload["box"] = [x1, y1, x2, y2]
-                                    except Exception:
-                                        pass
                                 if payload:
                                     data_channel["dc"].send(json.dumps(payload))
                                     if "hr" in payload or "rr" in payload:
