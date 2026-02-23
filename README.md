@@ -1,4 +1,4 @@
-HR/RR Prototype (Local + WebRTC)
+# HR/RR Prototype (Local + WebRTC)
 
 This repo contains a working prototype for **remote heart rate (HR)** and **respiratory rate (RR)** estimation from a webcam feed. It includes:
 - **Local live inference** (`open-r.py`) with on-screen HR/RR.
