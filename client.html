@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>rPPG Live (WebRTC)</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+      }
+      #video {
+        width: 480px;
+        border: 1px solid #ccc;
+      }
+      #hr {
+        font-size: 20px;
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>rPPG Live (WebRTC)</h2>
+    <div style="position: relative; display: inline-block;">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+    <div id="hr">HR: --</div>
+    <div id="rr">RR: --</div>
+
+    <script>
+      const video = document.getElementById("video");
+      const hrDiv = document.getElementById("hr");
+      const rrDiv = document.getElementById("rr");
+      const overlay = document.getElementById("overlay");
+      const ctx = overlay.getContext("2d");
+
+      async function start() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480, frameRate: 30 },
+          audio: false,
+        });
+        video.srcObject = stream;
+        await new Promise((r) => (video.onloadedmetadata = r));
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
+
+        const pc = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        });
+
+        const dc = pc.createDataChannel("metrics");
+        dc.onmessage = (evt) => {
+          try {
+            const data = JSON.parse(evt.data);
+            if (data.hr) {
+              hrDiv.textContent = `HR: ${data.hr.toFixed(1)} BPM`;
+            }
+            if (data.rr) {
+              rrDiv.textContent = `RR: ${data.rr.toFixed(1)} RPM`;
+            }
+            if (data.box) {
+              const [x1, y1, x2, y2] = data.box;
+              ctx.clearRect(0, 0, overlay.width, overlay.height);
+              ctx.strokeStyle = "lime";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            }
+          } catch (e) {}
+        };
+
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const resp = await fetch("/offer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sdp: pc.localDescription.sdp,
+            type: pc.localDescription.type,
+          }),
+        });
+        const answer = await resp.json();
+        await pc.setRemoteDescription(answer);
+      }
+
+      start().catch((err) => {
+        hrDiv.textContent = "Error: " + err;
+      });
+    </script>
+  </body>
+</html>

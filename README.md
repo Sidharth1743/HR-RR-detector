@@ -1,177 +1,103 @@
-<div align="center">
-  <img width="300" alt="rePyre logo" src="https://github.com/user-attachments/assets/d1775944-ab12-426a-93cb-86c2ba78f1d0" />
-  <br>
-	<br>
-  
-  [![Paper](https://img.shields.io/badge/Paper-ACM_Computing_Surveys-1975AE?logo=acm)](https://dl.acm.org/doi/10.1145/3771763)
+# resPyre — rPPG-Based HR/RR Prototype (Local + WebRTC)
 
-</div>
+This repo contains a working prototype for **remote heart rate (HR)** and **respiratory rate (RR)** estimation from a webcam feed. It includes:
+- **Local live inference** (`open-r.py`) with on-screen HR/RR.
+- **WebRTC client→server** inference (`server.py` + `client.html`) where the server computes HR/RR.
 
-**resPyre** is a comprehensive framework for estimating respiratory rate from video, using different methods and datasets.
+This is **not a diagnostic tool**. It provides non-contact vital sign estimation for research and prototyping only.
 
-## Overview
+---
 
-The main script [run_all.py](run_all.py) supports:
+## Why RR Matters (TB Screening Context)
+Tuberculosis (TB) is a respiratory disease whose **active pulmonary symptoms** can include a prolonged cough, chest pain, fever, night sweats, weight loss, fatigue, and coughing up blood. Respiratory rate (RR) is not a TB diagnostic by itself, but it is a **relevant physiologic signal** in respiratory screening contexts.  
+Sources:
+- CDC — Signs and Symptoms of Tuberculosis: https://www.cdc.gov/tb/signs-symptoms/index.html
+- CDC — About Tuberculosis: https://www.cdc.gov/tb/about/index.html
 
-1. Extracting respiratory signals from videos using different methods
-2. Evaluating the results with multiple metrics 
-3. Printing the evaluation metrics
+**Important:** This system **does not diagnose TB**. It only estimates HR/RR from video. Any medical decisions require clinical testing and professional evaluation.
 
-## Usage
+---
 
+## How RR Is Computed Here (Standard rPPG Post‑Processing)
+We follow a commonly used rPPG/PPG post‑processing approach:
+1. **rPPG/BVP extraction** from the face video stream.
+2. **Respiratory modulation signals** derived from the BVP:
+   - **Amplitude modulation (AM / envelope)** of the BVP.
+   - **Frequency modulation (FM / beat‑to‑beat interval variability)**.
+3. **Spectral peak detection** (Welch/FFT) in the respiratory band.
+4. **Fusion** of AM and FM estimates.
+
+This is consistent with established PPG respiration literature, which derives RR from respiratory‑induced variations in the PPG and then selects the dominant respiratory frequency.  
+Sources:
+- Karlen et al., 2013 (IEEE TBME): https://pubmed.ncbi.nlm.nih.gov/23399950/
+- Nilsson, 2013 (Anesth Analg review): https://pubmed.ncbi.nlm.nih.gov/23449854/
+
+---
+
+## What We Implemented
+**Local live HR/RR**
+- `open-r.py` runs open‑rppg live from a webcam.
+- HR is computed continuously.
+- RR is estimated from the last 30s BVP window using AM+FM and spectral peak detection.
+- SQI gating and median smoothing reduce spikes.
+
+**WebRTC client→server**
+- `server.py` runs FastAPI + aiortc.
+- `client.html` captures webcam and streams to the server.
+- Server computes HR/RR and sends results back over a data channel.
+
+---
+
+## Requirements (Python 3.12)
+Make sure you use **Python 3.12** (Python 3.13 removes modules some libs still depend on).
+
+Install dependencies in a venv:
 ```bash
-python run_all.py -a <action> -d <results_dir>
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install open-rppg opencv-python scipy fastapi uvicorn aiortc
 ```
 
-Arguments:
-- `-a`: Action to perform 
-  - `0`: Extract respiratory signals
-  - `1`: Evaluate results
-  - `2`: Print metrics
-- `-d`: Directory to save/load results (default: `results/`)
+---
 
-## Supported Methods
-
-The following methods are implemented:
-
-1. Deep Learning Methods:
-- [`MTTS_CAN`](deep/MTTS_CAN/train.py): Multi-Task Temporal Shift Attention Network 
-- [`BigSmall`](deep/BigSmall/predict_vitals.py): BigSmall Network
-
-2. Motion-based Methods:
-- [`OF_Deep`](run_all.py): Deep Optical Flow estimation
-- [`OF_Model`](run_all.py): Traditional Optical Flow (Farneback)
-- [`DoF`](run_all.py): Difference of Frames
-- [`profile1D`](run_all.py): 1D Motion Profile
-
-3. rPPG-based Methods:
-- [`peak`](run_all.py): Peak detection
-- [`morph`](run_all.py): Morphological analysis
-- [`bss_ssa`](run_all.py): Blind Source Separation with SSA
-- [`bss_emd`](run_all.py): Blind Source Separation with EMD
-
-## Supported Datasets 
-
-The code works with the following datasets:
-
-- [`BP4D`](run_all.py): BP4D Dataset
-- [`COHFACE`](run_all.py): COHFACE Dataset  
-- [`MAHNOB`](run_all.py): MAHNOB-HCI Dataset
-
-## Example Usage
-
-1. Extract respiratory signals using deep learning methods:
-
-```python
-methods = [BigSmall(), MTTS_CAN()]
-datasets = [BP4D(), COHFACE()]
-extract_respiration(datasets, methods, "results/")
-```
-
-2. Evaluate the results:
-
+## Run Local Live HR/RR
 ```bash
-python run_all.py -a 1 -d results/
+source .venv/bin/activate
+python open-r.py
 ```
 
-3. Print metrics:
+Notes:
+- RR needs ~30s of stable signal before it appears.
+- Keep lighting stable and minimize head motion.
 
-```bash 
-python run_all.py -a 2 -d results/
+---
+
+## Run WebRTC (Browser → Server)
+Start server:
+```bash
+source .venv/bin/activate
+python -m uvicorn server:app --host 127.0.0.1 --port 8000
 ```
 
-## Extending the Code
-
-### Adding New Datasets
-
-To add a new dataset, create a class that inherits from `DatasetBase` and implement the required methods:
-
-```python
-class NewDataset(DatasetBase):
-    def __init__(self):
-        super().__init__()
-        self.name = 'new_dataset'  # Unique dataset identifier
-        self.path = self.data_dir + 'path/to/dataset/'
-        self.fs_gt = 1000  # Ground truth sampling frequency
-        self.data = []
-
-    def load_dataset(self):
-        # Load dataset metadata and populate self.data list
-        # Each item should be a dict with:
-        # - video_path: path to video file
-        # - subject: subject ID
-        # - chest_rois: [] (empty list, populated during processing)
-        # - face_rois: [] (empty list, populated during processing) 
-        # - rppg_obj: [] (empty list, populated during processing)
-        # - gt: ground truth respiratory signal
-
-    def load_gt(self, trial_path):
-        # Load ground truth respiratory signal for a trial
-        pass
-
-    def extract_ROI(self, video_path, region='chest'):
-        # Extract ROIs from video for given region ('chest' or 'face')
-        pass
-
-    def extract_rppg(self, video_path, method='cpu_CHROM'):
-        # Extract rPPG signal from video
-        pass
+Open in browser:
+```
+http://localhost:8000/
 ```
 
-### Adding New Methods
+Allow camera access. HR/RR will appear after the warm‑up window.
 
-To add a new respiratory rate estimation method, inherit from `MethodBase`:
+---
 
-```python
-class NewMethod(MethodBase):
-    def __init__(self):
-        super().__init__()
-        self.name = 'new_method'  # Unique method identifier
-        self.data_type = 'chest'  # Input type: 'chest', 'face' or 'rppg'
+## Limitations
+- Webcam rPPG is sensitive to lighting and motion.
+- RR is a derived signal and can be noisy if signal quality is low.
+- This is **not a medical device** and should not be used for diagnosis.
 
-    def process(self, data):
-        # Implement respiratory signal extraction
-        # data contains:
-        # - chest_rois: list of chest ROI frames 
-        # - face_rois: list of face ROI frames
-        # - rppg_obj: rPPG signal object
-        # - fps: video framerate
-        # Return the extracted respiratory signal
-        pass
-```
+---
 
-After implementing the new classes, you can use them with the existing pipeline:
-
-```python
-methods = [NewMethod()]
-datasets = [NewDataset()]
-extract_respiration(datasets, methods, "results/")
-```
-
-## Requirements
-
-Required packages are listed in [requirements.txt](requirements.txt). Key dependencies include:
-
-- TensorFlow 2.2-2.4
-- OpenCV
-- SciPy
-- NumPy
-- Matplotlib
-
-## Reference
-
-If you use this code, please cite the paper:
-
-```
-@article{boccignone2025remote,
-  title={Remote Respiration Measurement with RGB Cameras: A Review and Benchmark},
-  author={Boccignone, Giuseppe and Cuculo, Vittorio and D'Amelio, Alessandro and Grossi, Giuliano and Lanzarotti, Raffaella and Patania, Sabrina},
-  journal={ACM Computing Surveys},
-  year={2025},
-  publisher={ACM New York, NY}
-}
-```
-
-## License
-
-This project is licensed under the GNU General Public License - see the [LICENSE](LICENSE) file for details.
+## References
+- CDC — Signs and Symptoms of TB: https://www.cdc.gov/tb/signs-symptoms/index.html  
+- CDC — About TB (overview): https://www.cdc.gov/tb/about/index.html  
+- Karlen et al., 2013 — Multiparameter RR from PPG (AM/FM/intensity + FFT): https://pubmed.ncbi.nlm.nih.gov/23399950/  
+- Nilsson, 2013 — Respiration signals from PPG (review): https://pubmed.ncbi.nlm.nih.gov/23449854/  
